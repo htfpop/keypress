@@ -6,53 +6,64 @@ SLEEP = 5
 HALT = 0
 time = 3600
 iteration = 0
+HALT_FLAG = threading.Event()
 
 
 def sleep():
     print(f'Sleeping for {SLEEP} seconds')
-    t.sleep(5)
+    t.sleep(SLEEP)
     print(f'Awake')
 
 
 def write():
     global iteration
-    string = f"[MSG {iteration}]: Test\r"
-    kb.write(string)
-    # kb.send('enter')
-    iteration = iteration + 1
+    while not HALT_FLAG.is_set():
+        string = f"[MSG {iteration}]: Test\r"
+        kb.write(string)
+        iteration += 1
+        printer()
+        t.sleep(0.2)
 
 
 def listener():
-    global HALT
-    print(f'Listening for key')
-    while HALT != 1:
-        if kb.is_pressed('ctrl + space'):
-            print('pressed')
-            HALT = 1
-    print(f'listener done')
+    print('Listening for key (Press CTRL + SPACE to stop)')
+    while not HALT_FLAG.is_set():
+        if kb.is_pressed('ctrl + C'):
+            print('Keyboard Interrupt')
+            HALT_FLAG.set()
+        else:
+            t.sleep(0.01)  # Shorter sleep time to check more frequently
 
 
 def printer():
-    global HALT
-    print_ctr = 0
-    while HALT == 0:
-        if print_ctr % 16 == 0:
-            print('\n', end='')
-        print('.', end=' ')
-        print_ctr = print_ctr + 1
-        t.sleep(1)
-    print(f'printer done')
+    global iteration
+    if iteration % 16 == 0:
+        print('\n', end='')
+    print('.', end=' ')
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    sleep()
+    try:
+        sleep()
 
-    x = threading.Thread(target=listener)
-    y = threading.Thread(target=printer)
-    x.start()
-    y.start()
+        # Start threads
+        x = threading.Thread(target=listener)
+        z = threading.Thread(target=write)
+        x.start()
+        z.start()
 
-    while HALT == 0:
-        write()
-        t.sleep(.1)
+        # Wait for threads to finish
+
+        x.join()
+        print("Listener Joined")
+
+        z.join()
+        print("Printer Joined")
+
+    except KeyboardInterrupt:
+        # Handle CTRL+C to exit gracefully
+        print('Interrupted. Stopping threads...')
+        HALT_FLAG.set()
+        x.join()
+        z.join()
